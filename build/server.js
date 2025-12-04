@@ -9,17 +9,18 @@ const express_1 = __importDefault(require("express"));
 const zod_1 = require("zod");
 const promises_1 = __importDefault(require("fs/promises"));
 const path_1 = __importDefault(require("path"));
-// ------------------------------------------------------------
-// 1. Create the MCP server
-// ------------------------------------------------------------
+const crypto_1 = __importDefault(require("crypto"));
+// -----------------------------------------------------------------------------
+// 1. Create MCP Server
+// -----------------------------------------------------------------------------
 const server = new mcp_js_1.McpServer({
     name: "mcp-demo",
     version: "1.0.0",
 });
-// ------------------------------------------------------------
-// 2. MCP TOOLS
-// ------------------------------------------------------------
-// 2.1 Add numbers
+// -----------------------------------------------------------------------------
+// 2. TOOLS
+// -----------------------------------------------------------------------------
+// ➤ 2.1 Add Numbers Tool
 server.registerTool("add_numbers", {
     title: "Addition Tool",
     description: "Adds two numbers and returns the result",
@@ -37,10 +38,10 @@ server.registerTool("add_numbers", {
         structuredContent: { result },
     };
 });
-// 2.2 Current time (IST)
+// ➤ 2.2 Current IST Time
 server.registerTool("current_time_ist", {
-    title: "Time Tool (IST)",
-    description: "Returns the current time in Asia/Kolkata timezone.",
+    title: "Current Time (IST)",
+    description: "Returns date/time in Asia/Kolkata.",
     inputSchema: {},
     outputSchema: {
         iso: zod_1.z.string(),
@@ -48,21 +49,34 @@ server.registerTool("current_time_ist", {
     },
 }, async () => {
     const now = new Date();
-    const iso = now.toISOString();
-    const human = now.toLocaleString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        dateStyle: "full",
-        timeStyle: "long",
-    });
     return {
-        content: [{ type: "text", text: JSON.stringify({ iso, human }) }],
-        structuredContent: { iso, human },
+        content: [
+            {
+                type: "text",
+                text: JSON.stringify({
+                    iso: now.toISOString(),
+                    human: now.toLocaleString("en-IN", {
+                        timeZone: "Asia/Kolkata",
+                        dateStyle: "full",
+                        timeStyle: "long",
+                    }),
+                }),
+            },
+        ],
+        structuredContent: {
+            iso: now.toISOString(),
+            human: now.toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                dateStyle: "full",
+                timeStyle: "long",
+            }),
+        },
     };
 });
-// 2.3 Read file
+// ➤ 2.3 Read File Tool
 server.registerTool("read_project_file", {
     title: "Read Project File",
-    description: "Reads a text file from the server project.",
+    description: "Reads a text file inside the project directory.",
     inputSchema: {
         relativePath: zod_1.z.string(),
     },
@@ -73,25 +87,43 @@ server.registerTool("read_project_file", {
     },
 }, async ({ relativePath }) => {
     const base = process.cwd();
-    const abs = path_1.default.resolve(base, relativePath);
+    const absolutePath = path_1.default.resolve(base, relativePath);
     try {
-        const content = await promises_1.default.readFile(abs, "utf8");
+        const content = await promises_1.default.readFile(absolutePath, "utf8");
         return {
-            content: [{ type: "text", text: JSON.stringify({ relativePath, absolutePath: abs, content }) }],
-            structuredContent: { relativePath, absolutePath: abs, content },
+            content: [
+                {
+                    type: "text",
+                    text: JSON.stringify({
+                        relativePath,
+                        absolutePath,
+                        content,
+                    }),
+                },
+            ],
+            structuredContent: { relativePath, absolutePath, content },
         };
     }
     catch (err) {
         return {
-            content: [{ type: "text", text: JSON.stringify({ relativePath, absolutePath: abs, error: err.message }) }],
-            structuredContent: { relativePath, absolutePath: abs, error: err.message },
+            content: [
+                {
+                    type: "text",
+                    text: JSON.stringify({
+                        relativePath,
+                        absolutePath,
+                        error: err.message,
+                    }),
+                },
+            ],
+            structuredContent: { relativePath, absolutePath, error: err.message },
         };
     }
 });
-// 2.4 List directory
+// ➤ 2.4 List Directory Tool
 server.registerTool("list_project_directory", {
     title: "List Directory",
-    description: "Lists files/folders inside a project directory.",
+    description: "Lists files and directories in the project folder.",
     inputSchema: {
         relativePath: zod_1.z.string().optional(),
     },
@@ -105,82 +137,63 @@ server.registerTool("list_project_directory", {
 }, async ({ relativePath }) => {
     const dirPath = path_1.default.resolve(process.cwd(), relativePath || ".");
     try {
-        const items = await promises_1.default.readdir(dirPath, { withFileTypes: true });
-        const entries = items.map((i) => ({
-            name: i.name,
-            type: i.isDirectory() ? "directory" : i.isFile() ? "file" : "other",
+        const files = await promises_1.default.readdir(dirPath, { withFileTypes: true });
+        const entries = files.map((file) => ({
+            name: file.name,
+            type: file.isDirectory()
+                ? "directory"
+                : file.isFile()
+                    ? "file"
+                    : "other",
         }));
         return {
-            content: [{ type: "text", text: JSON.stringify({ directory: dirPath, entries }) }],
+            content: [
+                {
+                    type: "text",
+                    text: JSON.stringify({ directory: dirPath, entries }),
+                },
+            ],
             structuredContent: { directory: dirPath, entries },
         };
     }
     catch (err) {
         return {
-            content: [{ type: "text", text: JSON.stringify({ directory: dirPath, error: err.message }) }],
+            content: [
+                {
+                    type: "text",
+                    text: JSON.stringify({ directory: dirPath, error: err.message }),
+                },
+            ],
             structuredContent: { directory: dirPath, error: err.message },
         };
     }
 });
-// ------------------------------------------------------------
-// 3. RESOURCE EXAMPLE
-// ------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 3. Resource Example
+// -----------------------------------------------------------------------------
 server.registerResource("greeting", new mcp_js_1.ResourceTemplate("greeting://{name}", { list: undefined }), {
     title: "Greeting Resource",
-    description: "Returns a greeting text.",
-}, async (uri, { name }) => {
-    return {
-        contents: [
-            {
-                uri: uri.href,
-                text: `Hello, ${name}!`,
-            },
-        ],
-    };
-});
-// ------------------------------------------------------------
-// 4. EXPRESS + MCP HTTP TRANSPORT
-// ------------------------------------------------------------
+    description: "Returns a greeting message",
+}, async (uri, { name }) => ({
+    contents: [{ uri: uri.href, text: `Hello, ${name}!` }],
+}));
+// -----------------------------------------------------------------------------
+// 4. EXPRESS + MCP (POST /mcp ONLY)
+// -----------------------------------------------------------------------------
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
-// ----------- POST /mcp -----------
 app.post("/mcp", async (req, res) => {
-    try {
-        console.log("POST /mcp hit");
-        const transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
-            sessionIdGenerator: () => crypto.randomUUID(), // ✅ required
-            enableJsonResponse: true // optional
-        });
-        res.on("close", () => transport.close());
-        await server.connect(transport);
-        await transport.handleRequest(req, res, req.body);
-    }
-    catch (err) {
-        console.error("MCP POST error:", err);
-        if (!res.headersSent)
-            res.status(500).json({ error: "Internal MCP server error" });
-    }
+    console.log("MCP request received");
+    const transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
+        sessionIdGenerator: () => crypto_1.default.randomUUID(),
+        enableJsonResponse: true, // JSON mode for ChatGPT
+    });
+    res.on("close", () => transport.close());
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
 });
-// ----------- GET /mcp/sse -----------
-app.get("/mcp/sse", async (req, res) => {
-    try {
-        console.log("SSE client connected");
-        const transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
-            sessionIdGenerator: () => crypto.randomUUID(), // ✅ required
-            enableJsonResponse: false // SSE mode
-        });
-        res.on("close", () => {
-            console.log("SSE connection closed");
-            transport.close();
-        });
-        await server.connect(transport);
-        // ❗ Your version of StreamableHTTPServerTransport does NOT have handleSSE()
-        // Instead use handleRequest() in SSE mode  
-        await transport.handleRequest(req, res);
-    }
-    catch (err) {
-        console.error("SSE error:", err);
-        if (!res.headersSent)
-            res.status(500).send("SSE error");
-    }
-});
+// -----------------------------------------------------------------------------
+// 5. Start Server
+// -----------------------------------------------------------------------------
+const port = Number(process.env.PORT) || 3000;
+app.listen(port, () => console.log(`🚀 MCP server running at http://0.0.0.0:${port}/mcp`));
